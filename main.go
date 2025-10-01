@@ -5,14 +5,30 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 func main() {
 
-	AllFiles := TraverseDir("test", 1)
+	var mut = &sync.Mutex{}
+	var wg sync.WaitGroup
 
-	index := createIndex(AllFiles)
+	allFiles := TraverseDir("test", 1)
+	srcMap := make(map[string]string)
+	index := make(map[string][]string)
 
+	wg.Add(len(allFiles))
+	for _, file := range allFiles {
+		go createSrcMap(file, srcMap,  &wg, mut)
+	}
+	wg.Wait()
+
+	wg.Add(len(srcMap))
+	for fileName, srcCode := range srcMap {
+		go createIndex(fileName, srcCode, index, &wg, mut)
+	}
+
+	wg.Wait()
 	fmt.Println(index)
 }
 
@@ -40,32 +56,30 @@ func TraverseDir(s string, depth int) []string {
 	return ds
 }
 
-func createIndex(allfiles []string) map[string][]string {
-	srcMap := make(map[string]string)
-	for _, v := range allfiles {
-		bs, err := os.ReadFile(v)
-		if err != nil {
-			fmt.Println("Error reading file:", err)
-			os.Exit(1)
-		}
-		contents := string(bs)
-		srcMap[v] = contents
+func createSrcMap(file string, srcMap map[string]string, wg *sync.WaitGroup, mut *sync.Mutex) {
+	defer wg.Done()
+	bs, err := os.ReadFile(file)
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		os.Exit(1)
 	}
+	contents := string(bs)
+	mut.Lock()
+	srcMap[file] = contents
+	mut.Unlock()
+}
 
-	index := make(map[string][]string)
-
-	for k, v := range srcMap {
-		keywords := strings.Fields(v)
-
-		for _, v := range keywords {
-			value, ok := index[v]
-			if ok {
-				index[v] = append(value, k)
-			} else {
-				index[v] = []string{k}
-			}
+func createIndex(fileName string, srcCode string, index map[string][]string, wg *sync.WaitGroup, mut *sync.Mutex) {
+	defer wg.Done()
+	keywords := strings.Fields(srcCode)
+	for _, word := range keywords {
+		mut.Lock()
+		value, ok := index[word]
+		if ok {
+			index[word] = append(value, fileName)
+		} else {
+			index[word] = []string{fileName}
 		}
+		mut.Unlock()
 	}
-
-	return index
 }
