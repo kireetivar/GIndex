@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ func main() {
 	}
 
 	wg.Wait()
-	fmt.Println(index)
+	createJsonFile(index)
 }
 
 func TraverseDir(s string, depth int) []string {
@@ -82,4 +83,15 @@ func createIndex(fileName string, srcCode string, index map[string][]string, wg 
 		}
 		mut.Unlock()
 	}
+}
+
+func createJsonFile(index map[string][]string) {
+	jsonbytes ,err := json.MarshalIndent(index, "", "  ")
+	if err!=nil {
+		fmt.Println("Error converting map to json: ", err)
+		os.Exit(1)
+	}
+
+	os.WriteFile("jsonIndex.json",jsonbytes,os.ModeAppend)
+
 }
